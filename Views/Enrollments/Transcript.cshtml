@@ -1,0 +1,246 @@
+﻿@model Student_GPA.ViewModels.StudentTranscriptViewModel
+
+@{
+    ViewData["Title"] = "Student Transcript";
+}
+
+<!-- رأسية بيانات الطالب والـ GPA -->
+<div class="card shadow-sm border-0 rounded-3 mb-4 bg-white">
+    <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap">
+        <div>
+            <h3 class="fw-bold text-success mb-1"><i class="fas fa-user-graduate me-2"></i>@Model.FullName</h3>
+            <p class="text-muted mb-0">Student Code: <span class="badge bg-light text-dark border">@Model.StudentCode</span></p>
+        </div>
+        <div class="d-flex align-items-center gap-3 mt-3 mt-md-0">
+            <div class="text-center px-3 py-2 bg-light rounded border">
+                <small class="text-muted d-block">Earned Hours</small>
+                <span class="fw-bold fs-5 text-dark">@Model.TotalEarnedHours</span>
+            </div>
+            <div class="text-center px-4 py-2 bg-success bg-opacity-10 rounded border border-success">
+                <small class="text-success d-block fw-bold">Cumulative GPA</small>
+                <span class="fw-bold fs-4 text-success">@Model.CumulativeGPA</span>
+            </div>
+
+            @if (Model.IsRegistrationOpen)
+            {
+                <a asp-action="Register" asp-route-studentId="@Model.StudentId" class="btn btn-primary-custom shadow-sm py-2">
+                    <i class="fas fa-plus-circle me-1"></i> Register Courses
+                </a>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- تنبيه لو التسجيل مقفل -->
+@if (!Model.IsRegistrationOpen)
+{
+    <div class="alert alert-warning border-0 shadow-sm mb-4" role="alert">
+        <i class="fas fa-info-circle me-2"></i> Registration is currently closed (No active semester found).
+    </div>
+}
+
+<!-- عرض الترمات (Semesters) -->
+@if (Model.Semesters != null && Model.Semesters.Any())
+{
+    @foreach (var semester in Model.Semesters)
+    {
+        <div class="card shadow-sm border-0 rounded-3 mb-4">
+            <div class="card-header @(semester.IsActive ? "bg-success text-white" : "bg-light text-dark") py-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-calendar-alt me-2"></i> @semester.SemesterName
+                    @if (semester.IsActive)
+                    {
+                        <span class="badge bg-light text-success ms-2 font-monospace">Active / Current</span>
+                    }
+                </h5>
+                <div>
+                    <span class="me-3">Hours: <strong>@semester.TotalSemesterHours</strong></span>
+                    <span>Semester GPA: <strong class="badge bg-white text-dark">@semester.SemesterGPA</strong></span>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light text-secondary">
+                        <tr>
+                            <th class="py-3 ps-3">Course Code</th>
+                            <th class="py-3">Course Name</th>
+                            <th class="py-3">Credit Hours</th>
+                            <th class="py-3">Score / Status</th>
+                            <th class="py-3">Grade</th>
+                            <th class="py-3">Points</th>
+                            <th class="py-3 text-end pe-3">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in semester.Enrollments)
+                        {
+                            <tr>
+                                <td class="ps-3"><span class="badge bg-light text-dark border">@item.CourseCode</span></td>
+                                <td class="fw-bold text-secondary">@item.CourseName</td>
+                                <td>@item.CreditHours Hours</td>
+                                <td>
+                                    @if (item.Status != "None")
+                                    {
+                                        <span class="badge bg-danger">@item.Status</span>
+                                    }
+                                    else if (item.NumericalScore.HasValue)
+                                    {
+                                        <span>@item.NumericalScore</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted fst-italic">Not Graded</span>
+                                    }
+                                </td>
+                                <td><span class="fw-bold text-success">@item.LetterGrade</span></td>
+                                <td>@item.Points</td>
+                                <td class="text-end pe-3">
+                                    <!-- زرار رصد الدرجة -->
+                                    <button type="button" class="btn btn-sm btn-outline-success me-1" data-bs-toggle="modal" data-bs-target="#gradeModal-@item.Id">
+                                        <i class="fas fa-marker"></i> Grade
+                                    </button>
+
+                                    @if (semester.IsActive)
+                                    {
+                                        <!-- زرار حذف المادة لو الترم لسه مفتوح -->
+                                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="confirmDrop(@Model.StudentId, @item.Id)">
+                                            <i class="fas fa-trash-alt"></i> Drop
+                                        </button>
+                                        <form id="drop-form-@item.Id" asp-action="DropCourse" method="post" style="display:none;">
+                                            <input type="hidden" name="studentId" value="@Model.StudentId" />
+                                            <input type="hidden" name="enrollmentId" value="@item.Id" />
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+
+                            <!-- Modal رصد الدرجة لكل مادة -->
+                            <div class="modal fade" id="gradeModal-@item.Id" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <form asp-action="UpdateGrade" method="post">
+                                            <div class="modal-header bg-success text-white">
+                                                <h5 class="modal-title">Update Grade: @item.CourseName</h5>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body text-start">
+                                                <input type="hidden" name="studentId" value="@Model.StudentId" />
+                                                <input type="hidden" name="enrollmentId" value="@item.Id" />
+
+                                                <div class="mb-3">
+                                                    <label class="form-label fw-bold">Special Status</label>
+                                                    <select name="status" class="form-select status-select" data-enrollment-id="@item.Id">
+                                                        <option value="0" selected="@(item.Status == "None")">None (Normal Grading)</option>
+                                                        <option value="1" selected="@(item.Status == "ABS")">ABS (Absent)</option>
+                                                        <option value="2" selected="@(item.Status == "W")">W (Withdrawn)</option>
+                                                        <option value="3" selected="@(item.Status == "I")">I (Incomplete)</option>
+                                                    </select>
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label class="form-label fw-bold">Numerical Score (0 - 100)</label>
+                                                    <input type="number" step="0.01" min="0" max="100" name="score" id="score-input-@item.Id" value="@item.NumericalScore" class="form-control score-input" />
+                                                    <small class="text-muted">Disabled automatically if a special status is selected.</small>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                                <button type="submit" class="btn btn-primary-custom">Save Changes</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}
+else
+{
+    <div class="text-center text-muted py-5 bg-white rounded shadow-sm">
+        <i class="fas fa-folder-open fa-3x mb-3 text-success opacity-50"></i>
+        <p class="mb-0 fs-5">No academic records or enrollments found for this student yet.</p>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        const Toast = Swal.mixin({
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3000,
+            timerProgressBar: true,
+            didOpen: (toast) => {
+                toast.addEventListener('mouseenter', Swal.stopTimer)
+                toast.addEventListener('mouseleave', Swal.resumeTimer)
+            }
+        });
+
+        @if (TempData["SuccessMessage"] != null)
+        {
+                <text>
+                Toast.fire({
+                    icon: 'success',
+                    title: '@TempData["SuccessMessage"]'
+                });
+                </text>
+        }
+        @if (TempData["ErrorMessage"] != null)
+        {
+                <text>
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Oops...',
+                    text: '@TempData["ErrorMessage"]',
+                    confirmButtonColor: '#198754'
+                });
+                </text>
+        }
+
+        // تفاعلية الـ Modal (قفل خانة الدرجة لو اتختار حالة خاصة)
+        document.addEventListener("DOMContentLoaded", function () {
+            const statusSelects = document.querySelectorAll(".status-select");
+
+            statusSelects.forEach(select => {
+                const enrollmentId = select.getAttribute("data-enrollment-id");
+                const scoreInput = document.getElementById("score-input-" + enrollmentId);
+
+                function toggleScoreInput() {
+                    // لو القيمة مش 0 (يعني ABS أو W أو إجازة/Incomplete)
+                    if (select.value !== "0") {
+                        scoreInput.value = "";
+                        scoreInput.disabled = true;
+                        scoreInput.style.backgroundColor = "#e9ecef";
+                    } else {
+                        scoreInput.disabled = false;
+                        scoreInput.style.backgroundColor = "#fff";
+                    }
+                }
+
+                // تنفيذ عند التحميل وعند التغيير
+                toggleScoreInput();
+                select.addEventListener("change", toggleScoreInput);
+            });
+        });
+
+        function confirmDrop(studentId, enrollmentId) {
+            Swal.fire({
+                title: 'Are you sure?',
+                text: "Do you want to drop this course?",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#198754',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Yes, drop it!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    document.getElementById('drop-form-' + enrollmentId).submit();
+                }
+            })
+        }
+    </script>
+}
